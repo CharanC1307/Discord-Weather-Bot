@@ -9,5 +9,5 @@ module.exports = {
             content: 'Pong!',
             ephemeral: true
         })
-    },
+    }
 }
