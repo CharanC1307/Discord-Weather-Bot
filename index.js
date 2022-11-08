@@ -1,84 +1,65 @@
-require('dotenv').config()
 const fs = require('fs');
 const path = require('path');
-const { Client, Collection, Intents } = require('discord.js');
+const mongoose = require('mongoose');
+const { Client, Collection, GatewayIntentBits } = require('discord.js');
 
+
+//Client
+//This is the client that will be used to interact with the Discord API.
+//Intents is used to make sure the client can recieve different types of data form Discord API.
 const client = new Client({
     intents: [
-        Intents.FLAGS.GUILDS,//adds server functionality
-        Intents.FLAGS.GUILD_MESSAGES //gets messages from our bot.
+        GatewayIntentBits.Guilds,//adds server functionality
+        GatewayIntentBits.GuildMessages, //gets messages from our bot.
+        GatewayIntentBits.MessageContent //gets messages from our bot.
     ]
-})
+});
 
-client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-})
+//Database
+//No reall database just caching the data.
+
+client.database = {};
+
+
+//Slash Commands
+//Use client.slashCommands.get(commandName) to get the command.
 
 client.slashCommands = new Collection();
 const slashCommandsPath = path.join(__dirname, 'slashCommands');
 const slashCommandFiles = fs.readdirSync(slashCommandsPath).filter(file => file.endsWith('.js'));
 
-for (const file of slashCommandFiles) {
+slashCommandFiles.forEach(file => {
     const command = require(path.join(slashCommandsPath, file));
     // Set a new item in the Collection
     // With the key as the command name and the value as the exported module
     client.slashCommands.set(command.data.name, command);
-}
-
-client.on("interactionCreate", async interaction => {
-    if (!interaction.isCommand()) return;
-
-    const command = client.slashCommands.get(interaction.commandName);
-    if (!command) return;
-
-    try {
-        await command.execute(interaction);
-    } catch (err) {
-        console.error(err);
-        await interaction.reply({
-            content: 'There was an error trying to execute that command!',
-            ephemeral: true
-        });
-    }
 })
+
+//Normal Commands
+//Use client.commands.get(commandName) to get the command.
+
+client.guild = {};
 
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
+commandFiles.forEach(file => {
     const command = require(path.join(commandsPath, file));
-    // Set a new item in the Collection
-    // With the key as the command name and the value as the exported module
     client.commands.set(command.name, command);
-}
-
-const prefix = '!';
-
-client.on("messageCreate", message => {
-    if (!(message.content.startsWith(prefix) || message.content.slice(0, client.user.id.length+3) === `<@${client.user.id}>`) || message.author.bot) return;
-    //First take out the prefix. Then take out blank spaces at the end. Then turn into an array that is split between blanck spaces.
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    //Command is the first element in the array and the array loses the first index. Command also turn to lower case.
-    const command = args.shift().toLowerCase();
-
-    if (!client.commands.has(command)) return;
-
-    try {
-        client.commands.get(command).execute(message, args);
-    } catch (err) {
-        console.error(err);
-        message.reply('there was an error trying to execute that command!');
-    }
-    /*
-    if (!command) return;
-    console.log(msg.content);
-    if (!msg.author.bot && msg.content.toLocaleLowerCase().includes('weather')) {
-        msg.reply(`Did you ask for the weather <@${msg.author.id}>?`);
-    }*/
 })
 
-client.login(process.env.BOT_TOKEN).then(() => {
-    client.user.setPresence({ activities: [{ name: 'the weather', type: 'WATCHING' }], status: 'online' });
-    console.log('Rich Presence Set')
-});
+//Events
+
+const eventsPath = path.join(__dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+
+eventFiles.forEach(file => {
+    const event = require(path.join(eventsPath, file));
+    if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
+    else client.on(event.name, (...args) => event.execute(...args, client));
+})
+
+//Login
+
+client.login(process.env.BOT_TOKEN)
